@@ -128,8 +128,6 @@ export const CellTab = () => {
   });
 
   const [selectedCellId, setSelectedCellId] = useState(null);
-  
-  // FIX: Pending reclassification — only applied on Confirm
   const [pendingType, setPendingType] = useState(null);
 
   const toggleSection = (type) => {
@@ -140,26 +138,21 @@ export const CellTab = () => {
   const totalWBC = cells.length;
 
   const selectedCellData = cells.find(c => c.id === selectedCellId) || cells[0];
-  
-  // The displayed type: if there's a pending reclassification for the selected cell, show that
   const displayedType = (pendingType && selectedCellId) ? pendingType : selectedCellData.type;
 
-  // Reset pending type when selecting a different cell
   const handleCellSelect = (cellId) => {
       setSelectedCellId(cellId);
-      setPendingType(null); // Clear any pending reclassification
+      setPendingType(null);
   };
 
-  // Handle reclassify button click — only stage, don't apply
   const handleReclassifyClick = (type) => {
       if (type === selectedCellData.type) {
-          setPendingType(null); // Clicking the current type cancels pending
+          setPendingType(null);
       } else {
           setPendingType(type);
       }
   };
 
-  // Handle confirm — apply the pending reclassification
   const handleConfirm = () => {
       if (pendingType && selectedCellId) {
           setCells(prev => prev.map(c => 
@@ -189,167 +182,209 @@ export const CellTab = () => {
 
   const categories = ['Granulocyte', 'Lymphocyte', 'Monocyte', 'Uncertain'];
 
+  // RBC morphology data (mock)
+  const rbcMorphology = [
+    { label: 'Normal', value: 2041, highlight: true },
+    { label: 'Macrocytosis', value: 0 },
+    { label: 'Microcytosis', value: 0 },
+    { label: 'Schistocyte', value: 0 },
+    { label: 'Teardrop cell', value: 0 },
+  ];
+
+  // PLT morphology data (mock)
+  const pltMorphology = [
+    { label: 'Normal', value: 248, highlight: true },
+    { label: 'Clumping', value: 0 },
+    { label: 'Large/Giant', value: 0 },
+    { label: 'Activated', value: 0 },
+  ];
+
   return (
     <div className="flex flex-col h-full gap-6 fade-in">
-        {/* Top summary cards: WBC (wider), RBC (narrower), PLT (narrower) */}
-        <div className="flex gap-4">
-             {/* WBC Count — removed "High Confidence" badge */}
-             <Card className="flex-[2] p-5 flex flex-col justify-center relative overflow-hidden">
-                <div className="flex justify-between items-start mb-2">
-                    <div>
-                        <div className="text-xs text-slate-500 font-bold uppercase mb-1">WBC Count</div>
-                        <div className="text-3xl font-bold text-slate-800">{totalWBC}</div>
-                    </div>
+      {/* Top summary cards — consistent 3-column layout */}
+      <div className="flex gap-4">
+
+        {/* WBC Count Card */}
+        <Card className="flex-1 p-5 flex flex-col justify-between">
+          <div className="text-xs text-slate-500 font-bold uppercase mb-3">WBC Count</div>
+          <div className="flex items-start gap-5">
+            <div className="text-3xl font-bold text-slate-800 leading-none pt-1">{totalWBC}</div>
+            <div className="flex-1 min-w-0">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Granulocyte</span>
+                  <span className="font-bold text-slate-700">{getCount('Granulocyte')}</span>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <div className="text-sm font-medium text-slate-600">
-                        <span className="font-bold text-slate-900">WBC Count {totalWBC}</span>
-                        <div className="mt-1 text-slate-500">
-                            GRA {getCount('Granulocyte')} / LYM {getCount('Lymphocyte')} / MON {getCount('Monocyte')} / Uncertain {getCount('Uncertain')}
-                        </div>
-                    </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Lymphocyte</span>
+                  <span className="font-bold text-slate-700">{getCount('Lymphocyte')}</span>
                 </div>
-             </Card>
-
-             {/* RBC Count — half width */}
-             <Card className="flex-[0.5] p-5 flex flex-col justify-between min-w-0">
-                <div className="flex justify-between items-start">
-                    <div className="text-xs text-slate-500 font-bold uppercase">RBC Count</div>
-                    <span className="text-[10px] px-2 py-1 bg-green-50 text-green-700 rounded-full font-bold border border-green-100 whitespace-nowrap">Normal</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Monocyte</span>
+                  <span className="font-bold text-slate-700">{getCount('Monocyte')}</span>
                 </div>
-                <div className="text-3xl font-bold text-slate-800">2041</div>
-             </Card>
-
-             {/* PLT Count — new card, half width */}
-             <Card className="flex-[0.5] p-5 flex flex-col justify-between min-w-0">
-                <div className="flex justify-between items-start">
-                    <div className="text-xs text-slate-500 font-bold uppercase">PLT Count</div>
-                    <span className="text-[10px] px-2 py-1 bg-green-50 text-green-700 rounded-full font-bold border border-green-100 whitespace-nowrap">Normal</span>
+                <div className="flex justify-between items-center text-xs border-t border-slate-100 pt-1.5">
+                  <span className="text-amber-600 font-medium">Uncertain</span>
+                  <span className="font-bold text-amber-600">{getCount('Uncertain')}</span>
                 </div>
-                <div className="text-3xl font-bold text-slate-800">248</div>
-             </Card>
-        </div>
-
-        <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
-            <Card className="col-span-8 p-6 overflow-y-auto scrollbar-hide">
-                {categories.map((type) => {
-                    const typeCells = cells.filter(c => c.type === type);
-                    const isExpanded = expandedSections[type];
-                    const visibleCells = isExpanded ? typeCells : typeCells.slice(0, 6);
-                    
-                    return (
-                        <div key={type} className="mb-8">
-                            <div onClick={() => toggleSection(type)} className="flex justify-between items-center mb-4 cursor-pointer group select-none">
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-slate-700 text-lg">{type}</h4>
-                                    <div className="p-1 rounded-full bg-slate-100 group-hover:bg-blue-100 transition-colors">
-                                        <Play size={12} className={`text-slate-500 group-hover:text-blue-600 transition-transform duration-200 ${isExpanded ? 'rotate-90' : 'rotate-0'}`} fill="currentColor" />
-                                    </div>
-                                </div>
-                                <span className="text-xs text-slate-400 font-medium">{typeCells.length} cells found</span>
-                            </div>
-                            <div className="grid grid-cols-6 gap-4 pl-2">
-                                {visibleCells.map((cell) => (
-                                    <div key={cell.id} className="flex flex-col items-center gap-2 fade-in">
-                                        <BloodCell type={cell.type} isSelected={selectedCellId === cell.id} onClick={() => handleCellSelect(cell.id)} />
-                                        <span className={`text-[10px] ${cell.type === 'Uncertain' ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{cell.conf}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            {!isExpanded && typeCells.length > 6 && (
-                                <div onClick={() => toggleSection(type)} className="text-center mt-2 text-xs text-blue-500 cursor-pointer hover:underline">
-                                    + {typeCells.length - 6} more cells...
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </Card>
-
-            <div className="col-span-4 flex flex-col gap-6">
-                <Card className="p-6 flex flex-col items-center flex-1 sticky top-0">
-                    <h4 className="text-sm font-bold text-slate-700 w-full mb-6 flex items-center gap-2">
-                        <ZoomIn size={16} /> Cell Inspector
-                    </h4>
-                    <div className="w-56 h-56 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center mb-6 relative group">
-                         <div className={`w-40 h-40 rounded-full relative blur-[1px] transition-all duration-300 ${selectedCellData.type === 'Uncertain' ? 'bg-amber-200/50' : 'bg-purple-200/50'}`}>
-                             <div className={`absolute inset-0 rounded-full animate-pulse ${selectedCellData.type === 'Uncertain' ? 'bg-amber-600/20' : 'bg-purple-600/20'}`}></div>
-                             <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-20 rounded-full blur-[4px] ${selectedCellData.type === 'Uncertain' ? 'bg-amber-700' : 'bg-purple-700'}`}></div>
-                         </div>
-                         <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
-                             <div className="w-full h-[1px] bg-slate-900"></div>
-                             <div className="h-full w-[1px] bg-slate-900 absolute"></div>
-                         </div>
-                    </div>
-                    <div className="w-full space-y-4">
-                        <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                            <span className="text-slate-500">Selected Class</span>
-                            <span className={`font-bold ${displayedType === 'Uncertain' ? 'text-amber-600' : 'text-blue-700'}`}>
-                                {displayedType}
-                                {pendingType && <span className="text-[10px] text-slate-400 ml-1">(pending)</span>}
-                            </span>
-                        </div>
-                        
-                        {/* NEW: AI Confidence row */}
-                        <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                            <span className="text-slate-500">AI Confidence</span>
-                            <span className={`font-bold ${selectedCellData.conf >= 0.8 ? 'text-green-600' : selectedCellData.conf >= 0.6 ? 'text-amber-600' : 'text-red-600'}`}>
-                                {(selectedCellData.conf * 100).toFixed(0)}%
-                            </span>
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Re-classify</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {categories.map(l => {
-                                    // Determine which type is "active" in the button display
-                                    const isCurrentOrPending = pendingType 
-                                        ? pendingType === l 
-                                        : selectedCellData.type === l;
-                                    return (
-                                        <button 
-                                            key={l} 
-                                            onClick={() => handleReclassifyClick(l)}
-                                            className={`py-2 text-xs font-medium border rounded transition-colors ${
-                                                isCurrentOrPending 
-                                                    ? 'bg-slate-800 text-white border-slate-800' 
-                                                    : 'border-slate-200 hover:bg-slate-50 text-slate-600'
-                                            }`}
-                                        >
-                                            {l === 'Granulocyte' ? 'GRA' : l === 'Lymphocyte' ? 'LYM' : l === 'Monocyte' ? 'MON' : 'UNC'}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        <button 
-                            onClick={handleConfirm}
-                            disabled={!pendingType}
-                            className={`w-full py-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 mt-2 shadow-sm transition-colors ${
-                                pendingType 
-                                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 cursor-pointer' 
-                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            }`}
-                        >
-                            <Check size={16} /> Confirm
-                        </button>
-                    </div>
-                </Card>
+              </div>
             </div>
-        </div>
+          </div>
+        </Card>
+
+        {/* RBC Count Card */}
+        <Card className="flex-1 p-5 flex flex-col justify-between">
+          <div className="text-xs text-slate-500 font-bold uppercase mb-3">RBC Count</div>
+          <div className="flex items-start gap-5">
+            <div className="text-3xl font-bold text-slate-800 leading-none pt-1">2041</div>
+            <div className="flex-1 min-w-0">
+              <div className="space-y-1.5">
+                {rbcMorphology.map(({ label, value, highlight }) => (
+                  <div key={label} className="flex justify-between items-center text-xs">
+                    <span className={highlight ? 'text-green-600 font-medium' : 'text-slate-500'}>{label}</span>
+                    <span className={`font-bold ${highlight ? 'text-green-600' : 'text-slate-400'}`}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* PLT Count Card */}
+        <Card className="flex-1 p-5 flex flex-col justify-between">
+          <div className="text-xs text-slate-500 font-bold uppercase mb-3">PLT Count</div>
+          <div className="flex items-start gap-5">
+            <div className="text-3xl font-bold text-slate-800 leading-none pt-1">248</div>
+            <div className="flex-1 min-w-0">
+              <div className="space-y-1.5">
+                {pltMorphology.map(({ label, value, highlight }) => (
+                  <div key={label} className="flex justify-between items-center text-xs">
+                    <span className={highlight ? 'text-green-600 font-medium' : 'text-slate-500'}>{label}</span>
+                    <span className={`font-bold ${highlight ? 'text-green-600' : 'text-slate-400'}`}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+      </div>
+
+      <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
+          <Card className="col-span-8 p-6 overflow-y-auto scrollbar-hide">
+              {categories.map((type) => {
+                  const typeCells = cells.filter(c => c.type === type);
+                  const isExpanded = expandedSections[type];
+                  const visibleCells = isExpanded ? typeCells : typeCells.slice(0, 6);
+                  
+                  return (
+                      <div key={type} className="mb-8">
+                          <div onClick={() => toggleSection(type)} className="flex justify-between items-center mb-4 cursor-pointer group select-none">
+                              <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-slate-700 text-lg">{type}</h4>
+                                  <div className="p-1 rounded-full bg-slate-100 group-hover:bg-blue-100 transition-colors">
+                                      <Play size={12} className={`text-slate-500 group-hover:text-blue-600 transition-transform duration-200 ${isExpanded ? 'rotate-90' : 'rotate-0'}`} fill="currentColor" />
+                                  </div>
+                              </div>
+                              <span className="text-xs text-slate-400 font-medium">{typeCells.length} cells found</span>
+                          </div>
+                          <div className="grid grid-cols-6 gap-4 pl-2">
+                              {visibleCells.map((cell) => (
+                                  <div key={cell.id} className="flex flex-col items-center gap-2 fade-in">
+                                      <BloodCell type={cell.type} isSelected={selectedCellId === cell.id} onClick={() => handleCellSelect(cell.id)} />
+                                      <span className={`text-[10px] ${cell.type === 'Uncertain' ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{cell.conf}</span>
+                                  </div>
+                              ))}
+                          </div>
+                          {!isExpanded && typeCells.length > 6 && (
+                              <div onClick={() => toggleSection(type)} className="text-center mt-2 text-xs text-blue-500 cursor-pointer hover:underline">
+                                  + {typeCells.length - 6} more cells...
+                              </div>
+                          )}
+                      </div>
+                  );
+              })}
+          </Card>
+
+          <div className="col-span-4 flex flex-col gap-6">
+              <Card className="p-6 flex flex-col items-center flex-1 sticky top-0">
+                  <h4 className="text-sm font-bold text-slate-700 w-full mb-6 flex items-center gap-2">
+                      <ZoomIn size={16} /> Cell Inspector
+                  </h4>
+                  <div className="w-56 h-56 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center mb-6 relative group">
+                       <div className={`w-40 h-40 rounded-full relative blur-[1px] transition-all duration-300 ${selectedCellData.type === 'Uncertain' ? 'bg-amber-200/50' : 'bg-purple-200/50'}`}>
+                           <div className={`absolute inset-0 rounded-full animate-pulse ${selectedCellData.type === 'Uncertain' ? 'bg-amber-600/20' : 'bg-purple-600/20'}`}></div>
+                           <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-20 rounded-full blur-[4px] ${selectedCellData.type === 'Uncertain' ? 'bg-amber-700' : 'bg-purple-700'}`}></div>
+                       </div>
+                       <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                           <div className="w-full h-[1px] bg-slate-900"></div>
+                           <div className="h-full w-[1px] bg-slate-900 absolute"></div>
+                       </div>
+                  </div>
+                  <div className="w-full space-y-4">
+                      <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-slate-500">Selected Class</span>
+                          <span className={`font-bold ${displayedType === 'Uncertain' ? 'text-amber-600' : 'text-blue-700'}`}>
+                              {displayedType}
+                              {pendingType && <span className="text-[10px] text-slate-400 ml-1">(pending)</span>}
+                          </span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-slate-500">AI Confidence</span>
+                          <span className={`font-bold ${selectedCellData.conf >= 0.8 ? 'text-green-600' : selectedCellData.conf >= 0.6 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {(selectedCellData.conf * 100).toFixed(0)}%
+                          </span>
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Re-classify</label>
+                          <div className="grid grid-cols-2 gap-2">
+                              {categories.map(l => {
+                                  const isCurrentOrPending = pendingType 
+                                      ? pendingType === l 
+                                      : selectedCellData.type === l;
+                                  return (
+                                      <button 
+                                          key={l} 
+                                          onClick={() => handleReclassifyClick(l)}
+                                          className={`py-2 text-xs font-medium border rounded transition-colors ${
+                                              isCurrentOrPending 
+                                                  ? 'bg-slate-800 text-white border-slate-800' 
+                                                  : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                                          }`}
+                                      >
+                                          {l === 'Granulocyte' ? 'GRA' : l === 'Lymphocyte' ? 'LYM' : l === 'Monocyte' ? 'MON' : 'UNC'}
+                                      </button>
+                                  );
+                              })}
+                          </div>
+                      </div>
+                      <button 
+                          onClick={handleConfirm}
+                          disabled={!pendingType}
+                          className={`w-full py-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 mt-2 shadow-sm transition-colors ${
+                              pendingType 
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 cursor-pointer' 
+                                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          }`}
+                      >
+                          <Check size={16} /> Confirm
+                      </button>
+                  </div>
+              </Card>
+          </div>
+      </div>
     </div>
   );
 };
 
-// --- 3. Viewer Tab (Slide switching + working zoom) ---
+// --- 3. Viewer Tab ---
 
-// Helper: generate reproducible scattered cells for a given slide index
 const generateSlideCells = (slideIndex, virtualW, virtualH) => {
-    // Use a simple seeded-ish approach with slide index
     const cells = [];
     const seed = (slideIndex + 1) * 1337;
     for (let i = 0; i < 40; i++) {
-        // Simple pseudo-random using sine
         const s1 = Math.abs(Math.sin(seed + i * 7.13) * 10000) % 1;
         const s2 = Math.abs(Math.sin(seed + i * 13.37) * 10000) % 1;
         const s3 = Math.abs(Math.sin(seed + i * 3.71) * 10000) % 1;
@@ -370,16 +405,11 @@ export const ViewerTab = () => {
 
     const viewportRef = useRef(null);
     const [viewportSize, setViewportSize] = useState({ w: 800, h: 600 });
-
-    // Active slide
     const [activeSlide, setActiveSlide] = useState(0);
-
-    // Pan & Zoom
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
     const [isDragging, setIsDragging] = useState(false);
 
-    // Pre-generate cells for all slides
     const allSlideCells = useMemo(() => {
         return Array.from({ length: TOTAL_SLIDES }, (_, i) => 
             generateSlideCells(i, VIRTUAL_WIDTH, VIRTUAL_HEIGHT)
@@ -388,7 +418,6 @@ export const ViewerTab = () => {
 
     const scatteredCells = allSlideCells[activeSlide];
 
-    // Update viewport size on mount and resize
     useEffect(() => {
         const updateSize = () => {
             if (viewportRef.current) {
@@ -403,12 +432,10 @@ export const ViewerTab = () => {
         return () => window.removeEventListener('resize', updateSize);
     }, []);
 
-    // Reset pan when switching slides or zooming
     useEffect(() => {
         setPan({ x: 0, y: 0 });
     }, [activeSlide]);
 
-    // Clamp pan within bounds based on zoom
     const clampPan = useCallback((newX, newY, currentZoom) => {
         const scaledW = VIRTUAL_WIDTH * currentZoom;
         const scaledH = VIRTUAL_HEIGHT * currentZoom;
@@ -420,7 +447,6 @@ export const ViewerTab = () => {
         };
     }, [viewportSize]);
 
-    // Mouse handlers for panning
     const handleMouseDown = () => setIsDragging(true);
     const handleMouseUp = () => setIsDragging(false);
 
@@ -431,18 +457,15 @@ export const ViewerTab = () => {
         setPan(clampPan(newX, newY, zoom));
     };
 
-    // Zoom handlers
     const handleZoomChange = (newZoom) => {
         const clamped = Math.max(0.3, Math.min(3, newZoom));
         setZoom(clamped);
-        // Re-clamp pan for new zoom level
         setPan(prev => clampPan(prev.x, prev.y, clamped));
     };
 
     const handleZoomIn = () => handleZoomChange(zoom + 0.2);
     const handleZoomOut = () => handleZoomChange(zoom - 0.2);
 
-    // Wheel zoom
     const handleWheel = useCallback((e) => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -459,12 +482,10 @@ export const ViewerTab = () => {
         }
     }, [handleWheel]);
 
-    // Mini-map calculations
     const mapW = 200;
     const ratio = mapW / VIRTUAL_WIDTH;
     const mapH = VIRTUAL_HEIGHT * ratio;
 
-    // The red box represents what's visible — accounts for zoom
     const redBox = {
         w: (viewportSize.w / zoom) * ratio,
         h: (viewportSize.h / zoom) * ratio,
@@ -472,7 +493,6 @@ export const ViewerTab = () => {
         y: Math.abs(pan.y) / zoom * ratio
     };
 
-    // Slide content style
     const slidePattern = {
         backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
         backgroundSize: '40px 40px',
@@ -484,7 +504,6 @@ export const ViewerTab = () => {
         transition: isDragging ? 'none' : 'transform 0.15s ease-out'
     };
 
-    // Slider value: map zoom (0.3 - 3) to range (0 - 100)
     const sliderValue = ((zoom - 0.3) / (3 - 0.3)) * 100;
     const handleSliderChange = (e) => {
         const val = parseFloat(e.target.value);
@@ -494,7 +513,6 @@ export const ViewerTab = () => {
 
     return (
         <div className="h-full flex gap-6 fade-in">
-            {/* Slide Thumbnails */}
             <div className="w-32 flex flex-col gap-3 h-full overflow-y-auto pr-1">
                 {Array.from({ length: TOTAL_SLIDES }, (_, i) => (
                     <div 
@@ -506,7 +524,6 @@ export const ViewerTab = () => {
                                 : 'border-slate-200 hover:border-slate-400'
                         }`}
                     >
-                        {/* Mini preview of each slide's cells */}
                         <div className="w-full h-full bg-slate-50 relative">
                             {allSlideCells[i].slice(0, 15).map((cell) => (
                                 <div 
@@ -529,10 +546,7 @@ export const ViewerTab = () => {
                 ))}
             </div>
 
-            {/* Main Canvas Area */}
             <Card className="flex-1 relative overflow-hidden group border-slate-300 select-none">
-                
-                {/* Viewport */}
                 <div 
                     ref={viewportRef}
                     className="w-full h-full relative"
@@ -542,7 +556,6 @@ export const ViewerTab = () => {
                     onMouseLeave={handleMouseUp}
                     onMouseMove={handleMouseMove}
                 >
-                    {/* The Huge Slide Layer */}
                     <div style={slidePattern} className="absolute top-0 left-0 border border-slate-200 origin-top-left">
                         {scatteredCells.map((cell) => (
                             <div 
@@ -559,7 +572,6 @@ export const ViewerTab = () => {
                     </div>
                 </div>
 
-                {/* Mini-map */}
                 <div 
                     className="absolute bottom-4 left-4 bg-white border-2 border-blue-500 shadow-xl z-20 overflow-hidden"
                     style={{ width: mapW, height: mapH }}
@@ -595,7 +607,6 @@ export const ViewerTab = () => {
                     </div>
                 </div>
 
-                {/* Zoom Controls — WORKING */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur border border-slate-200 p-2 rounded-full shadow-lg flex items-center gap-3 z-20">
                     <button 
                         onClick={handleZoomOut} 

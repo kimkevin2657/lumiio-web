@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, User, Bell, ChevronDown, ChevronUp, Search, ChevronsUpDown, ChevronRight } from 'lucide-react';
+import { FileText, User, Bell, ChevronDown, Search, ChevronsUpDown, ChevronUp, ChevronRight, Pencil, Check, X } from 'lucide-react';
 import { EXAM_LIST, PATIENT_INFO } from '../data';
 import { CBCTab, CellTab, ViewerTab } from '../components/TabContent';
 
@@ -7,11 +7,31 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('cell');
   const [selectedExam, setSelectedExam] = useState(EXAM_LIST[0].id);
 
-  // Exam list collapse state
-  const [examListCollapsed, setExamListCollapsed] = useState(false);
+  // Search state for exam list
+  const [examSearch, setExamSearch] = useState('');
 
-  // Sort state: { column: 'id' | 'date' | 'flag', direction: 'asc' | 'desc' }
+  // Sort state
   const [sortConfig, setSortConfig] = useState({ column: 'id', direction: 'asc' });
+
+  // Note editing state
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState(PATIENT_INFO.note);
+  const [draftNote, setDraftNote] = useState(PATIENT_INFO.note);
+
+  const handleNoteEdit = () => {
+    setDraftNote(noteValue);
+    setIsEditingNote(true);
+  };
+
+  const handleNoteSave = () => {
+    setNoteValue(draftNote);
+    setIsEditingNote(false);
+  };
+
+  const handleNoteCancel = () => {
+    setDraftNote(noteValue);
+    setIsEditingNote(false);
+  };
 
   const handleSort = (column) => {
     setSortConfig((prev) => {
@@ -23,7 +43,16 @@ const Dashboard = () => {
   };
 
   const sortedExams = useMemo(() => {
-    const sorted = [...EXAM_LIST];
+    // First filter by search
+    const filtered = EXAM_LIST.filter(exam => {
+      const q = examSearch.toLowerCase();
+      return (
+        exam.id.toLowerCase().includes(q) ||
+        (exam.patientName && exam.patientName.toLowerCase().includes(q))
+      );
+    });
+
+    const sorted = [...filtered];
     const { column, direction } = sortConfig;
     sorted.sort((a, b) => {
       let valA, valB;
@@ -42,7 +71,7 @@ const Dashboard = () => {
       return 0;
     });
     return sorted;
-  }, [sortConfig]);
+  }, [sortConfig, examSearch]);
 
   const SortIcon = ({ column }) => {
     const isActive = sortConfig.column === column;
@@ -97,77 +126,97 @@ const Dashboard = () => {
         {/* Left Sidebar */}
         <aside className="w-80 flex flex-col gap-4 flex-shrink-0">
           
-          {/* Exam List */}
-          <div className={`bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden transition-all duration-300 ${examListCollapsed ? 'flex-shrink-0' : 'flex-1'}`}>
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setExamListCollapsed(!examListCollapsed)}>
-                    <FileText size={18} className="text-blue-600"/>
-                    <h3 className="font-bold text-slate-800">Exam List</h3>
-                    <div className="p-0.5 rounded hover:bg-slate-100 transition-colors">
-                        <ChevronRight 
-                          size={16} 
-                          className={`text-slate-400 transition-transform duration-200 ${examListCollapsed ? 'rotate-0' : 'rotate-90'}`} 
-                        />
-                    </div>
-                </div>
-                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{EXAM_LIST.length}</span>
-            </div>
-            {!examListCollapsed && (
-              <div className="flex-1 overflow-y-auto">
-                  <table className="w-full text-left border-collapse">
-                      <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase sticky top-0 z-10">
-                          <tr>
-                              <th 
-                                className="p-3 pl-4 cursor-pointer hover:text-slate-700 select-none transition-colors"
-                                onClick={() => handleSort('id')}
-                              >
-                                <span className="inline-flex items-center">
-                                  ID <SortIcon column="id" />
-                                </span>
-                              </th>
-                              <th 
-                                className="p-3 cursor-pointer hover:text-slate-700 select-none transition-colors"
-                                onClick={() => handleSort('date')}
-                              >
-                                <span className="inline-flex items-center">
-                                  Date <SortIcon column="date" />
-                                </span>
-                              </th>
-                              <th 
-                                className="p-3 text-center cursor-pointer hover:text-slate-700 select-none transition-colors"
-                                onClick={() => handleSort('flag')}
-                              >
-                                <span className="inline-flex items-center justify-center">
-                                  St <SortIcon column="flag" />
-                                </span>
-                              </th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                          {sortedExams.map((exam) => (
-                              <tr 
-                                  key={exam.id} 
-                                  onClick={() => setSelectedExam(exam.id)}
-                                  className={`text-sm cursor-pointer transition-colors group ${selectedExam === exam.id ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}
-                              >
-                                  <td className={`p-3 pl-4 font-medium ${selectedExam === exam.id ? 'text-blue-700' : 'text-slate-700'}`}>{exam.id}</td>
-                                  <td className="p-3 text-slate-500 text-xs">
-                                      {exam.date.split(' ')[0]}
-                                      <div className="text-[10px] text-slate-400">{exam.date.split(' ')[1]}</div>
-                                  </td>
-                                  <td className="p-3 text-center">
-                                      <div className={`w-2 h-2 rounded-full mx-auto ${exam.flag ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-300'}`}></div>
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
-                  </table>
+          {/* Exam List — always expanded, no collapse button */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden flex-1">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText size={18} className="text-blue-600"/>
+                <h3 className="font-bold text-slate-800">Exam List</h3>
               </div>
-            )}
+              <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{EXAM_LIST.length}</span>
+            </div>
+
+            {/* Search bar inside exam list */}
+            <div className="px-3 py-2 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                <Search size={13} className="text-slate-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={examSearch}
+                  onChange={e => setExamSearch(e.target.value)}
+                  placeholder="환자명 또는 검사 ID 검색..."
+                  className="bg-transparent text-xs outline-none text-slate-700 w-full placeholder-slate-400"
+                />
+                {examSearch && (
+                  <button onClick={() => setExamSearch('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase sticky top-0 z-10">
+                  <tr>
+                    <th 
+                      className="p-3 pl-4 cursor-pointer hover:text-slate-700 select-none transition-colors"
+                      onClick={() => handleSort('id')}
+                    >
+                      <span className="inline-flex items-center">
+                        ID <SortIcon column="id" />
+                      </span>
+                    </th>
+                    <th 
+                      className="p-3 cursor-pointer hover:text-slate-700 select-none transition-colors"
+                      onClick={() => handleSort('date')}
+                    >
+                      <span className="inline-flex items-center">
+                        Date <SortIcon column="date" />
+                      </span>
+                    </th>
+                    <th 
+                      className="p-3 text-center cursor-pointer hover:text-slate-700 select-none transition-colors"
+                      onClick={() => handleSort('flag')}
+                    >
+                      <span className="inline-flex items-center justify-center">
+                        St <SortIcon column="flag" />
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sortedExams.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-6 text-center text-xs text-slate-400">검색 결과가 없습니다</td>
+                    </tr>
+                  ) : (
+                    sortedExams.map((exam) => (
+                      <tr 
+                        key={exam.id} 
+                        onClick={() => setSelectedExam(exam.id)}
+                        className={`text-sm cursor-pointer transition-colors group ${selectedExam === exam.id ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}
+                      >
+                        <td className={`p-3 pl-4 font-medium ${selectedExam === exam.id ? 'text-blue-700' : 'text-slate-700'}`}>{exam.id}</td>
+                        <td className="p-3 text-slate-500 text-xs">
+                          {exam.date.split(' ')[0]}
+                          <div className="text-[10px] text-slate-400">{exam.date.split(' ')[1]}</div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <div className={`w-2 h-2 rounded-full mx-auto ${exam.flag ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-300'}`}></div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Patient Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex-shrink-0">
              <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
                     <User size={20} />
@@ -187,10 +236,46 @@ const Dashboard = () => {
                     <span className="font-medium text-slate-700">{PATIENT_INFO.gender} / 45</span>
                 </div>
                 <div className="pt-1">
-                    <span className="text-slate-500 block mb-1 text-xs uppercase">Clinical Note</span>
-                    <p className="text-slate-700 bg-amber-50 border border-amber-100 p-2 rounded text-xs leading-relaxed">
-                        {PATIENT_INFO.note}
-                    </p>
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-500 text-xs uppercase">Clinical Note</span>
+                        {!isEditingNote ? (
+                            <button
+                                onClick={handleNoteEdit}
+                                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-600 transition-colors"
+                            >
+                                <Pencil size={11} /> Edit
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={handleNoteSave}
+                                    className="flex items-center gap-1 text-[11px] text-green-600 hover:text-green-700 transition-colors font-medium"
+                                >
+                                    <Check size={11} /> Save
+                                </button>
+                                <span className="text-slate-300 text-xs">|</span>
+                                <button
+                                    onClick={handleNoteCancel}
+                                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500 transition-colors"
+                                >
+                                    <X size={11} /> Cancel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {isEditingNote ? (
+                        <textarea
+                            value={draftNote}
+                            onChange={e => setDraftNote(e.target.value)}
+                            className="w-full text-slate-700 bg-white border border-blue-300 ring-1 ring-blue-200 p-2 rounded text-xs leading-relaxed resize-none outline-none focus:border-blue-400 transition-colors"
+                            rows={3}
+                            autoFocus
+                        />
+                    ) : (
+                        <p className="text-slate-700 bg-amber-50 border border-amber-100 p-2 rounded text-xs leading-relaxed">
+                            {noteValue}
+                        </p>
+                    )}
                 </div>
              </div>
           </div>
