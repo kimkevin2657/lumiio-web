@@ -1,71 +1,246 @@
-import React, { useState, useMemo } from 'react';
-import { FileText, User, Bell, ChevronDown, Search, ChevronsUpDown, ChevronUp, ChevronRight, Pencil, Check, X } from 'lucide-react';
-import { EXAM_LIST, PATIENT_INFO } from '../data';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import {
+  FileText, User, Bell, ChevronDown, ChevronUp, Search,
+  ChevronsUpDown, Pencil, Check, X, Monitor, FileBarChart,
+  Settings, HelpCircle, LogOut, UserCircle, Wifi, WifiOff,
+  RefreshCw, Download, CheckCircle2, Clock, AlertTriangle, Info
+} from 'lucide-react';
+import { EXAM_LIST, EXAMS_DATABASE, NOTIFICATIONS, DEVICES } from '../data';
 import { CBCTab, CellTab, ViewerTab } from '../components/TabContent';
 
+// ─── Dropdown wrapper (closes on outside click) ─────────────────────────
+const useClickOutside = (ref, handler) => {
+  useEffect(() => {
+    const listener = (e) => {
+      if (!ref.current || ref.current.contains(e.target)) return;
+      handler();
+    };
+    document.addEventListener('mousedown', listener);
+    return () => document.removeEventListener('mousedown', listener);
+  }, [ref, handler]);
+};
+
+// ─── Notification Panel ─────────────────────────────────────────────────
+const NotificationPanel = ({ notifications, open, onClose }) => {
+  const ref = useRef(null);
+  useClickOutside(ref, onClose);
+  if (!open) return null;
+
+  const iconMap = {
+    flag: <AlertTriangle size={14} className="text-red-500" />,
+    approval: <CheckCircle2 size={14} className="text-green-500" />,
+    sync: <RefreshCw size={14} className="text-blue-500" />,
+    info: <Info size={14} className="text-slate-400" />,
+  };
+
+  return (
+    <div ref={ref} className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+      <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+        <h3 className="font-bold text-slate-800 text-sm">알림</h3>
+        <span className="text-[10px] text-blue-600 font-medium cursor-pointer hover:underline">모두 읽음 처리</span>
+      </div>
+      <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+        {notifications.map((n) => (
+          <div key={n.id} className={`px-4 py-3 flex gap-3 hover:bg-slate-50 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/40' : ''}`}>
+            <div className="mt-0.5 flex-shrink-0">{iconMap[n.type] || iconMap.info}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-700 truncate">{n.title}</span>
+                {!n.read && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
+              <span className="text-[10px] text-slate-400 mt-1 block">{n.time}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-3 border-t border-slate-100 text-center">
+        <button className="text-xs text-blue-600 font-medium hover:underline">모든 알림 보기</button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Profile Dropdown ───────────────────────────────────────────────────
+const ProfileDropdown = ({ open, onClose }) => {
+  const ref = useRef(null);
+  useClickOutside(ref, onClose);
+  if (!open) return null;
+
+  return (
+    <div ref={ref} className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+      <div className="p-4 border-b border-slate-100">
+        <div className="font-bold text-slate-800 text-sm">Dr. Kim</div>
+        <div className="text-xs text-slate-400">Pathologist · Lumiio</div>
+      </div>
+      <div className="py-1">
+        {[
+          { icon: <UserCircle size={15} />, label: '프로필 정보', action: null },
+          { icon: <Settings size={15} />, label: '계정 설정', action: null },
+        ].map((item, i) => (
+          <button key={i} className="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+            {item.icon} {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="border-t border-slate-100 py-1">
+        <button className="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-red-500 hover:bg-red-50 transition-colors">
+          <LogOut size={15} /> 로그아웃
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Top-bar Menu Dropdown (Devices / Report / Settings / Help) ─────────
+const MenuDropdown = ({ open, onClose, children }) => {
+  const ref = useRef(null);
+  useClickOutside(ref, onClose);
+  if (!open) return null;
+  return (
+    <div ref={ref} className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden min-w-[340px]">
+      {children}
+    </div>
+  );
+};
+
+// ─── Devices Panel Content ──────────────────────────────────────────────
+const DevicesPanel = () => (
+  <div className="p-4 space-y-4 max-h-[420px] overflow-y-auto">
+    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">장비 상태</h4>
+    {DEVICES.map((dev) => (
+      <div key={dev.id} className="border border-slate-100 rounded-lg p-3 space-y-2 hover:border-slate-300 transition-colors">
+        <div className="flex justify-between items-center">
+          <span className="font-semibold text-sm text-slate-800">{dev.name}</span>
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+            dev.connection === 'Online' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+          }`}>
+            {dev.connection === 'Online' ? <Wifi size={10} /> : <WifiOff size={10} />}
+            {dev.connection}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <div className="text-slate-400">모델</div><div className="text-slate-700">{dev.model}</div>
+          <div className="text-slate-400">시리얼</div><div className="text-slate-700">{dev.serial}</div>
+        </div>
+        <div className="border-t border-slate-50 pt-2 mt-2">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <div className="text-slate-400">마지막 동기화</div><div className="text-slate-700">{dev.lastSync}</div>
+            <div className="text-slate-400">스케줄</div><div className="text-slate-700">{dev.syncSchedule}</div>
+          </div>
+          <button className="mt-2 w-full py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors flex items-center justify-center gap-1">
+            <RefreshCw size={12} /> 지금 동기화
+          </button>
+        </div>
+      </div>
+    ))}
+    <button className="w-full py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors">
+      + 새 장비 페어링
+    </button>
+  </div>
+);
+
+// ─── Report Panel Content ───────────────────────────────────────────────
+const ReportPanel = ({ selectedExamId }) => {
+  const [sections, setSections] = useState({ cbcSummary: true, classification: false, comments: false });
+  return (
+    <div className="p-4 space-y-4">
+      <div>
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">CBC Report (PDF)</h4>
+        <div className="space-y-2 text-sm">
+          <div className="text-xs text-slate-400 mb-1">포함 섹션</div>
+          {Object.entries({ cbcSummary: 'CBC Summary', classification: 'Classification Summary', comments: 'Comments' }).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded transition-colors">
+              <input
+                type="checkbox"
+                checked={sections[key]}
+                onChange={() => setSections(p => ({ ...p, [key]: !p[key] }))}
+                className="accent-blue-600 w-3.5 h-3.5"
+              />
+              <span className="text-slate-700 text-xs">{label}</span>
+            </label>
+          ))}
+          <button className="w-full mt-2 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5">
+            <Download size={13} /> PDF 생성
+          </button>
+        </div>
+      </div>
+      <div className="border-t border-slate-100 pt-4">
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">CBC Table (CSV)</h4>
+        <button className="w-full py-2 border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5">
+          <Download size={13} /> .csv 다운로드
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// Dashboard
+// ═══════════════════════════════════════════════════════════════════════
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('cell');
+  const [activeTab, setActiveTab] = useState('cbc');
   const [selectedExam, setSelectedExam] = useState(EXAM_LIST[0].id);
 
-  // Search state for exam list
+  // Exam search
   const [examSearch, setExamSearch] = useState('');
 
-  // Sort state
+  // Sort
   const [sortConfig, setSortConfig] = useState({ column: 'id', direction: 'asc' });
 
-  // Note editing state
+  // Note editing — per exam
+  const [noteOverrides, setNoteOverrides] = useState({});
   const [isEditingNote, setIsEditingNote] = useState(false);
-  const [noteValue, setNoteValue] = useState(PATIENT_INFO.note);
-  const [draftNote, setDraftNote] = useState(PATIENT_INFO.note);
+  const [draftNote, setDraftNote] = useState('');
 
-  const handleNoteEdit = () => {
-    setDraftNote(noteValue);
-    setIsEditingNote(true);
-  };
+  // Top-bar dropdown states
+  const [openMenu, setOpenMenu] = useState(null); // 'notifications' | 'profile' | 'devices' | 'report' | 'settings' | 'help' | null
 
-  const handleNoteSave = () => {
-    setNoteValue(draftNote);
-    setIsEditingNote(false);
-  };
+  const toggleMenu = useCallback((menu) => {
+    setOpenMenu((prev) => (prev === menu ? null : menu));
+  }, []);
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
 
-  const handleNoteCancel = () => {
-    setDraftNote(noteValue);
-    setIsEditingNote(false);
-  };
+  // ── Derived data ─────────────────────────────
+  const examRecord = EXAMS_DATABASE[selectedExam];
+  const patientInfo = examRecord?.patient || { id: '', name: '—', gender: '', age: 0, note: '' };
+  const cbcData = examRecord?.cbcData || [];
+  const cellData = examRecord?.cellData || null;
 
+  const currentNote = noteOverrides[selectedExam] !== undefined ? noteOverrides[selectedExam] : patientInfo.note;
+
+  const handleNoteEdit = () => { setDraftNote(currentNote); setIsEditingNote(true); };
+  const handleNoteSave = () => { setNoteOverrides(p => ({ ...p, [selectedExam]: draftNote })); setIsEditingNote(false); };
+  const handleNoteCancel = () => { setIsEditingNote(false); };
+
+  // Reset editing when exam changes
+  useEffect(() => { setIsEditingNote(false); }, [selectedExam]);
+
+  // ── Sorting ──────────────────────────────────
   const handleSort = (column) => {
-    setSortConfig((prev) => {
-      if (prev.column === column) {
-        return { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      }
-      return { column, direction: 'asc' };
-    });
+    setSortConfig((prev) =>
+      prev.column === column
+        ? { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { column, direction: 'asc' }
+    );
   };
 
   const sortedExams = useMemo(() => {
-    // First filter by search
-    const filtered = EXAM_LIST.filter(exam => {
-      const q = examSearch.toLowerCase();
-      return (
+    const q = examSearch.toLowerCase();
+    const filtered = EXAM_LIST.filter(
+      (exam) =>
         exam.id.toLowerCase().includes(q) ||
-        (exam.patientName && exam.patientName.toLowerCase().includes(q))
-      );
-    });
-
+        (exam.patientName && exam.patientName.toLowerCase().includes(q)) ||
+        (exam.patientId && exam.patientId.toLowerCase().includes(q))
+    );
     const sorted = [...filtered];
     const { column, direction } = sortConfig;
     sorted.sort((a, b) => {
       let valA, valB;
-      if (column === 'id') {
-        valA = a.id;
-        valB = b.id;
-      } else if (column === 'date') {
-        valA = a.date;
-        valB = b.date;
-      } else if (column === 'flag') {
-        valA = a.flag ? 1 : 0;
-        valB = b.flag ? 1 : 0;
-      }
+      if (column === 'id') { valA = a.id; valB = b.id; }
+      else if (column === 'date') { valA = a.date; valB = b.date; }
+      else if (column === 'flag') { valA = a.flag ? 1 : 0; valB = b.flag ? 1 : 0; }
+      else if (column === 'approved') { valA = a.approved ? 1 : 0; valB = b.approved ? 1 : 0; }
       if (valA < valB) return direction === 'asc' ? -1 : 1;
       if (valA > valB) return direction === 'asc' ? 1 : -1;
       return 0;
@@ -75,77 +250,162 @@ const Dashboard = () => {
 
   const SortIcon = ({ column }) => {
     const isActive = sortConfig.column === column;
-    if (!isActive) {
-      return <ChevronsUpDown size={12} className="text-slate-300 ml-1 inline-block" />;
-    }
-    return sortConfig.direction === 'asc' 
+    if (!isActive) return <ChevronsUpDown size={12} className="text-slate-300 ml-1 inline-block" />;
+    return sortConfig.direction === 'asc'
       ? <ChevronUp size={12} className="text-blue-600 ml-1 inline-block" />
       : <ChevronDown size={12} className="text-blue-600 ml-1 inline-block" />;
   };
 
+  const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
+
+  // ── Render ───────────────────────────────────
   return (
     <div className="h-screen flex flex-col bg-slate-50 overflow-hidden font-sans">
-      {/* 1. Top Navigation Bar */}
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shadow-sm flex-shrink-0">
-        <div className="flex items-center gap-12">
+      {/* ===== 1. Top Navigation Bar ===== */}
+      <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30 shadow-sm flex-shrink-0">
+        {/* Left: logo + nav links */}
+        <div className="flex items-center gap-10">
           <div className="flex items-center gap-2">
-             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">L</div>
-             <span className="font-bold text-lg text-slate-800 tracking-tight">Lumiio</span>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">L</div>
+            <span className="font-bold text-lg text-slate-800 tracking-tight">Lumiio</span>
           </div>
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-500">
-            <button className="text-slate-900">Analysis</button>
-            <button className="hover:text-slate-800 transition-colors">Patients</button>
-            <button className="hover:text-slate-800 transition-colors">History</button>
+
+          <nav className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-500">
+            <button className="px-3 py-1.5 rounded-md text-slate-900 bg-slate-100 font-semibold">Analysis</button>
+            <button className="px-3 py-1.5 rounded-md hover:bg-slate-50 hover:text-slate-800 transition-colors">Patients</button>
+            <button className="px-3 py-1.5 rounded-md hover:bg-slate-50 hover:text-slate-800 transition-colors">History</button>
+
+            <div className="w-px h-5 bg-slate-200 mx-2" />
+
+            {/* Devices menu */}
+            <div className="relative">
+              <button
+                onClick={() => toggleMenu('devices')}
+                className={`px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors ${openMenu === 'devices' ? 'bg-slate-100 text-slate-900' : 'hover:bg-slate-50 hover:text-slate-800'}`}
+              >
+                <Monitor size={14} /> Devices
+              </button>
+              <MenuDropdown open={openMenu === 'devices'} onClose={closeMenu}>
+                <DevicesPanel />
+              </MenuDropdown>
+            </div>
+
+            {/* Report menu */}
+            <div className="relative">
+              <button
+                onClick={() => toggleMenu('report')}
+                className={`px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors ${openMenu === 'report' ? 'bg-slate-100 text-slate-900' : 'hover:bg-slate-50 hover:text-slate-800'}`}
+              >
+                <FileBarChart size={14} /> Report
+              </button>
+              <MenuDropdown open={openMenu === 'report'} onClose={closeMenu}>
+                <ReportPanel selectedExamId={selectedExam} />
+              </MenuDropdown>
+            </div>
+
+            {/* Settings (planning) */}
+            <div className="relative">
+              <button
+                onClick={() => toggleMenu('settings')}
+                className={`px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors ${openMenu === 'settings' ? 'bg-slate-100 text-slate-900' : 'hover:bg-slate-50 hover:text-slate-800'}`}
+              >
+                <Settings size={14} /> Settings
+              </button>
+              <MenuDropdown open={openMenu === 'settings'} onClose={closeMenu}>
+                <div className="p-8 text-center text-sm text-slate-400">
+                  <Settings size={24} className="mx-auto mb-2 text-slate-300" />
+                  기획 중입니다
+                </div>
+              </MenuDropdown>
+            </div>
+
+            {/* Help (planning) */}
+            <div className="relative">
+              <button
+                onClick={() => toggleMenu('help')}
+                className={`px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors ${openMenu === 'help' ? 'bg-slate-100 text-slate-900' : 'hover:bg-slate-50 hover:text-slate-800'}`}
+              >
+                <HelpCircle size={14} /> Help
+              </button>
+              <MenuDropdown open={openMenu === 'help'} onClose={closeMenu}>
+                <div className="p-8 text-center text-sm text-slate-400">
+                  <HelpCircle size={24} className="mx-auto mb-2 text-slate-300" />
+                  기획 중입니다
+                </div>
+              </MenuDropdown>
+            </div>
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="bg-slate-100 px-3 py-2 rounded-lg flex items-center gap-2 text-slate-400 w-64">
-            <Search size={16} />
-            <input type="text" placeholder="Search Patient ID..." className="bg-transparent text-sm outline-none text-slate-700 w-full" />
+        {/* Right: notifications + profile */}
+        <div className="flex items-center gap-3">
+          {/* Notification bell */}
+          <div className="relative">
+            <button
+              onClick={() => toggleMenu('notifications')}
+              className={`p-2 rounded-full transition-all relative ${
+                openMenu === 'notifications' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full border-2 border-white text-[9px] text-white font-bold flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            <NotificationPanel
+              notifications={NOTIFICATIONS}
+              open={openMenu === 'notifications'}
+              onClose={closeMenu}
+            />
           </div>
-          <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all relative">
-            <Bell size={20} />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-          </button>
-          <div className="h-8 w-[1px] bg-slate-200 mx-1"></div>
-          <div className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1 pr-3 rounded-full transition-colors">
-            <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-xs">DR</div>
-            <div className="text-xs">
+
+          <div className="h-8 w-[1px] bg-slate-200 mx-1" />
+
+          {/* Profile */}
+          <div className="relative">
+            <button
+              onClick={() => toggleMenu('profile')}
+              className="flex items-center gap-3 hover:bg-slate-50 p-1 pr-3 rounded-full transition-colors"
+            >
+              <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-xs font-bold">DR</div>
+              <div className="text-xs text-left">
                 <div className="font-bold text-slate-700">Dr. Kim</div>
                 <div className="text-slate-400">Pathologist</div>
-            </div>
-            <ChevronDown size={14} className="text-slate-400" />
+              </div>
+              <ChevronDown size={14} className="text-slate-400" />
+            </button>
+            <ProfileDropdown open={openMenu === 'profile'} onClose={closeMenu} />
           </div>
         </div>
       </header>
 
-      {/* 2. Main Workspace Layout */}
+      {/* ===== 2. Main Workspace ===== */}
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
-        
-        {/* Left Sidebar */}
+
+        {/* ── Left Sidebar ── */}
         <aside className="w-80 flex flex-col gap-4 flex-shrink-0">
-          
-          {/* Exam List — always expanded, no collapse button */}
+
+          {/* Exam List */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden flex-1">
-            {/* Header */}
             <div className="p-4 border-b border-slate-100 flex justify-between items-center flex-shrink-0">
               <div className="flex items-center gap-2">
-                <FileText size={18} className="text-blue-600"/>
+                <FileText size={18} className="text-blue-600" />
                 <h3 className="font-bold text-slate-800">Exam List</h3>
               </div>
               <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{EXAM_LIST.length}</span>
             </div>
 
-            {/* Search bar inside exam list */}
+            {/* Search */}
             <div className="px-3 py-2 border-b border-slate-100 flex-shrink-0">
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
                 <Search size={13} className="text-slate-400 flex-shrink-0" />
                 <input
                   type="text"
                   value={examSearch}
-                  onChange={e => setExamSearch(e.target.value)}
-                  placeholder="환자명 또는 검사 ID 검색..."
+                  onChange={(e) => setExamSearch(e.target.value)}
+                  placeholder="환자명 / 환자ID / 검사ID 검색..."
                   className="bg-transparent text-xs outline-none text-slate-700 w-full placeholder-slate-400"
                 />
                 {examSearch && (
@@ -159,53 +419,44 @@ const Dashboard = () => {
             {/* Table */}
             <div className="flex-1 overflow-y-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase sticky top-0 z-10">
+                <thead className="bg-slate-50 text-[10px] font-semibold text-slate-500 uppercase sticky top-0 z-10">
                   <tr>
-                    <th 
-                      className="p-3 pl-4 cursor-pointer hover:text-slate-700 select-none transition-colors"
-                      onClick={() => handleSort('id')}
-                    >
-                      <span className="inline-flex items-center">
-                        ID <SortIcon column="id" />
-                      </span>
+                    <th className="p-2.5 pl-4 cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('id')}>
+                      <span className="inline-flex items-center">ID <SortIcon column="id" /></span>
                     </th>
-                    <th 
-                      className="p-3 cursor-pointer hover:text-slate-700 select-none transition-colors"
-                      onClick={() => handleSort('date')}
-                    >
-                      <span className="inline-flex items-center">
-                        Date <SortIcon column="date" />
-                      </span>
+                    <th className="p-2.5 cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('date')}>
+                      <span className="inline-flex items-center">Date <SortIcon column="date" /></span>
                     </th>
-                    <th 
-                      className="p-3 text-center cursor-pointer hover:text-slate-700 select-none transition-colors"
-                      onClick={() => handleSort('flag')}
-                    >
-                      <span className="inline-flex items-center justify-center">
-                        St <SortIcon column="flag" />
-                      </span>
+                    <th className="p-2.5 text-center cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('flag')}>
+                      <span className="inline-flex items-center justify-center">Flag <SortIcon column="flag" /></span>
+                    </th>
+                    <th className="p-2.5 text-center cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('approved')}>
+                      <span className="inline-flex items-center justify-center">승인 <SortIcon column="approved" /></span>
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {sortedExams.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="p-6 text-center text-xs text-slate-400">검색 결과가 없습니다</td>
-                    </tr>
+                    <tr><td colSpan={4} className="p-6 text-center text-xs text-slate-400">검색 결과가 없습니다</td></tr>
                   ) : (
                     sortedExams.map((exam) => (
-                      <tr 
-                        key={exam.id} 
+                      <tr
+                        key={exam.id}
                         onClick={() => setSelectedExam(exam.id)}
-                        className={`text-sm cursor-pointer transition-colors group ${selectedExam === exam.id ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}
+                        className={`text-xs cursor-pointer transition-colors ${selectedExam === exam.id ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}
                       >
-                        <td className={`p-3 pl-4 font-medium ${selectedExam === exam.id ? 'text-blue-700' : 'text-slate-700'}`}>{exam.id}</td>
-                        <td className="p-3 text-slate-500 text-xs">
+                        <td className={`p-2.5 pl-4 font-medium ${selectedExam === exam.id ? 'text-blue-700' : 'text-slate-700'}`}>
+                          {exam.id}
+                        </td>
+                        <td className="p-2.5 text-slate-500">
                           {exam.date.split(' ')[0]}
                           <div className="text-[10px] text-slate-400">{exam.date.split(' ')[1]}</div>
                         </td>
-                        <td className="p-3 text-center">
-                          <div className={`w-2 h-2 rounded-full mx-auto ${exam.flag ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-300'}`}></div>
+                        <td className="p-2.5 text-center">
+                          <div className={`w-2 h-2 rounded-full mx-auto ${exam.flag ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-300'}`} />
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <div className={`w-2 h-2 rounded-full mx-auto ${exam.approved ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-slate-300'}`} />
                         </td>
                       </tr>
                     ))
@@ -215,105 +466,97 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Patient Card */}
+          {/* Patient Info Card */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex-shrink-0">
-             <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-                    <User size={20} />
-                </div>
-                <div>
-                    <div className="text-sm text-slate-400 font-medium">Patient Info</div>
-                    <div className="font-bold text-slate-800">{PATIENT_INFO.name}</div>
-                </div>
-             </div>
-             <div className="space-y-2 text-sm">
-                <div className="flex justify-between border-b border-slate-50 pb-2">
-                    <span className="text-slate-500">ID</span>
-                    <span className="font-medium text-slate-700">{PATIENT_INFO.id}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-50 pb-2">
-                    <span className="text-slate-500">Gender/Age</span>
-                    <span className="font-medium text-slate-700">{PATIENT_INFO.gender} / 45</span>
-                </div>
-                <div className="pt-1">
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="text-slate-500 text-xs uppercase">Clinical Note</span>
-                        {!isEditingNote ? (
-                            <button
-                                onClick={handleNoteEdit}
-                                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-600 transition-colors"
-                            >
-                                <Pencil size={11} /> Edit
-                            </button>
-                        ) : (
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={handleNoteSave}
-                                    className="flex items-center gap-1 text-[11px] text-green-600 hover:text-green-700 transition-colors font-medium"
-                                >
-                                    <Check size={11} /> Save
-                                </button>
-                                <span className="text-slate-300 text-xs">|</span>
-                                <button
-                                    onClick={handleNoteCancel}
-                                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500 transition-colors"
-                                >
-                                    <X size={11} /> Cancel
-                                </button>
-                            </div>
-                        )}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                <User size={20} />
+              </div>
+              <div>
+                <div className="text-sm text-slate-400 font-medium">Patient Info</div>
+                <div className="font-bold text-slate-800">{patientInfo.name}</div>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between border-b border-slate-50 pb-2">
+                <span className="text-slate-500">ID</span>
+                <span className="font-medium text-slate-700">{patientInfo.id}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-50 pb-2">
+                <span className="text-slate-500">Gender / Age</span>
+                <span className="font-medium text-slate-700">{patientInfo.gender} / {patientInfo.age}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-50 pb-2">
+                <span className="text-slate-500">검사일시</span>
+                <span className="font-medium text-slate-700">{examRecord?.exam.date || '—'}</span>
+              </div>
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-slate-500 text-xs uppercase">Clinical Note</span>
+                  {!isEditingNote ? (
+                    <button onClick={handleNoteEdit} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-600 transition-colors">
+                      <Pencil size={11} /> Edit
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button onClick={handleNoteSave} className="flex items-center gap-1 text-[11px] text-green-600 hover:text-green-700 font-medium">
+                        <Check size={11} /> Save
+                      </button>
+                      <span className="text-slate-300 text-xs">|</span>
+                      <button onClick={handleNoteCancel} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500">
+                        <X size={11} /> Cancel
+                      </button>
                     </div>
-                    {isEditingNote ? (
-                        <textarea
-                            value={draftNote}
-                            onChange={e => setDraftNote(e.target.value)}
-                            className="w-full text-slate-700 bg-white border border-blue-300 ring-1 ring-blue-200 p-2 rounded text-xs leading-relaxed resize-none outline-none focus:border-blue-400 transition-colors"
-                            rows={3}
-                            autoFocus
-                        />
-                    ) : (
-                        <p className="text-slate-700 bg-amber-50 border border-amber-100 p-2 rounded text-xs leading-relaxed">
-                            {noteValue}
-                        </p>
-                    )}
+                  )}
                 </div>
-             </div>
+                {isEditingNote ? (
+                  <textarea
+                    value={draftNote}
+                    onChange={(e) => setDraftNote(e.target.value)}
+                    className="w-full text-slate-700 bg-white border border-blue-300 ring-1 ring-blue-200 p-2 rounded text-xs leading-relaxed resize-none outline-none focus:border-blue-400"
+                    rows={3}
+                    autoFocus
+                  />
+                ) : (
+                  <p className={`text-slate-700 p-2 rounded text-xs leading-relaxed ${currentNote ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50 border border-slate-100 text-slate-400 italic'}`}>
+                    {currentNote || '메모 없음'}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </aside>
 
-        {/* Right Content Area */}
+        {/* ── Right Content Area ── */}
         <main className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
-            
-            {/* Custom Tab Bar */}
-            <div className="flex border-b border-slate-200 px-6 pt-4 gap-6 bg-white shrink-0">
-                {['CBC Result', 'Cell Classification', 'Slide Viewer'].map((label) => {
-                    const key = label === 'CBC Result' ? 'cbc' : label === 'Cell Classification' ? 'cell' : 'viewer';
-                    const isActive = activeTab === key;
-                    return (
-                        <button 
-                            key={key}
-                            onClick={() => setActiveTab(key)}
-                            className={`pb-4 text-sm font-medium transition-all relative ${
-                                isActive ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
-                            }`}
-                        >
-                            {label}
-                            {isActive && (
-                                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full shadow-[0_-2px_6px_rgba(37,99,235,0.3)]"></span>
-                            )}
-                        </button>
-                    )
-                })}
-            </div>
+          {/* Tab Bar */}
+          <div className="flex border-b border-slate-200 px-6 pt-4 gap-6 bg-white shrink-0">
+            {['CBC Result', 'Cell Classification', 'Slide Viewer'].map((label) => {
+              const key = label === 'CBC Result' ? 'cbc' : label === 'Cell Classification' ? 'cell' : 'viewer';
+              const isActive = activeTab === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`pb-4 text-sm font-medium transition-all relative ${isActive ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  {label}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full shadow-[0_-2px_6px_rgba(37,99,235,0.3)]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-            {/* Viewport */}
-            <div className="flex-1 overflow-hidden relative bg-slate-50/50">
-                <div className="absolute inset-0 p-6 overflow-auto">
-                    {activeTab === 'cbc' && <CBCTab />}
-                    {activeTab === 'cell' && <CellTab />}
-                    {activeTab === 'viewer' && <ViewerTab />}
-                </div>
+          {/* Viewport — pass data props */}
+          <div className="flex-1 overflow-hidden relative bg-slate-50/50">
+            <div className="absolute inset-0 p-6 overflow-auto">
+              {activeTab === 'cbc' && <CBCTab cbcData={cbcData} />}
+              {activeTab === 'cell' && <CellTab examId={selectedExam} cellData={cellData} />}
+              {activeTab === 'viewer' && <ViewerTab />}
             </div>
+          </div>
         </main>
       </div>
     </div>
