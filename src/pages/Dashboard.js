@@ -115,12 +115,14 @@ const DevicesPanel = ({ devices, onSync, onCreate }) => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', model: '', serial: '', syncSchedule: 'Manual' });
   const [submitting, setSubmitting] = useState(false);
+  const [newApiKey, setNewApiKey] = useState(null);
 
   const handleCreate = async () => {
     if (!form.name || !form.model || !form.serial) return;
     setSubmitting(true);
     try {
-      await onCreate(form);
+      const created = await onCreate(form);
+      setNewApiKey(created?.apiKey || null);
       setForm({ name: '', model: '', serial: '', syncSchedule: 'Manual' });
       setShowForm(false);
     } catch { }
@@ -128,8 +130,17 @@ const DevicesPanel = ({ devices, onSync, onCreate }) => {
   };
 
   return (
-    <div className="p-4 space-y-4 max-h-[420px] overflow-y-auto">
+    <div className="p-4 space-y-4 max-h-[480px] overflow-y-auto">
       <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">장비 상태</h4>
+
+      {newApiKey && (
+        <div className="border border-green-200 bg-green-50 rounded-lg p-3 space-y-1">
+          <div className="text-xs font-bold text-green-700">장비 등록 완료 — API Key (한 번만 표시됨)</div>
+          <div className="text-[10px] text-green-600 font-mono bg-white border border-green-200 rounded px-2 py-1.5 break-all select-all">{newApiKey}</div>
+          <button onClick={() => setNewApiKey(null)} className="text-[10px] text-green-600 hover:underline mt-1">확인</button>
+        </div>
+      )}
+
       {devices.map((dev) => (
         <div key={dev.id} className="border border-slate-100 rounded-lg p-3 space-y-2 hover:border-slate-300 transition-colors">
           <div className="flex justify-between items-center">
@@ -192,6 +203,28 @@ const DevicesPanel = ({ devices, onSync, onCreate }) => {
 // ─── Report Panel Content ───────────────────────────────────────────────
 const ReportPanel = ({ selectedExamId }) => {
   const [sections, setSections] = useState({ cbcSummary: true, classification: false, comments: false });
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [csvLoading, setCsvLoading] = useState(false);
+
+  const handlePdfDownload = async () => {
+    if (!selectedExamId) return;
+    setPdfLoading(true);
+    try {
+      const selected = Object.entries(sections).filter(([, v]) => v).map(([k]) => k);
+      await examsApi.downloadPdf(selectedExamId, selected.join(',') || 'cbcSummary');
+    } catch { }
+    setPdfLoading(false);
+  };
+
+  const handleCsvDownload = async () => {
+    if (!selectedExamId) return;
+    setCsvLoading(true);
+    try {
+      await examsApi.downloadCsv(selectedExamId);
+    } catch { }
+    setCsvLoading(false);
+  };
+
   return (
     <div className="p-4 space-y-4">
       <div>
@@ -209,18 +242,23 @@ const ReportPanel = ({ selectedExamId }) => {
               <span className="text-slate-700 text-xs">{label}</span>
             </label>
           ))}
-          <button className="w-full mt-2 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5">
-            <Download size={13} /> PDF 생성
+          <button
+            onClick={handlePdfDownload}
+            disabled={pdfLoading}
+            className="w-full mt-2 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:bg-blue-400 transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Download size={13} /> {pdfLoading ? '생성 중...' : 'PDF 생성'}
           </button>
         </div>
       </div>
       <div className="border-t border-slate-100 pt-4">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">CBC Table (CSV)</h4>
         <button
-          onClick={() => examsApi.exportCsv(selectedExamId)}
-          className="w-full py-2 border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5"
+          onClick={handleCsvDownload}
+          disabled={csvLoading}
+          className="w-full py-2 border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 disabled:bg-slate-100 transition-colors flex items-center justify-center gap-1.5"
         >
-          <Download size={13} /> .csv 다운로드
+          <Download size={13} /> {csvLoading ? '다운로드 중...' : '.csv 다운로드'}
         </button>
       </div>
     </div>
@@ -353,6 +391,7 @@ const Dashboard = () => {
   const handleDeviceCreate = async (form) => {
     const created = await devicesApi.create(form);
     setDevices(prev => [...prev, created]);
+    return created;
   };
 
   // ── Logout ─────────────────────────────────────

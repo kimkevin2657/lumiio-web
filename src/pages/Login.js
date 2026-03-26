@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Microscope, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Microscope, ArrowRight, ShieldCheck, Loader2, UserPlus } from 'lucide-react';
 import { authApi } from '../api';
 
 const Login = () => {
   const navigate = useNavigate();
   const [focused, setFocused] = useState(null);
-  const [username, setUsername] = useState('doctor123');
-  const [password, setPassword] = useState('password');
+  const [isRegister, setIsRegister] = useState(false);
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -16,14 +19,28 @@ const Login = () => {
     setError('');
     setLoading(true);
     try {
-      await authApi.login(username, password);
+      if (isRegister) {
+        await authApi.register(username, password, displayName || username);
+      } else {
+        await authApi.login(username, password);
+      }
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err.message || (isRegister ? 'Registration failed' : 'Login failed'));
     } finally {
       setLoading(false);
     }
   };
+
+  const toggleMode = () => {
+    setIsRegister(!isRegister);
+    setError('');
+  };
+
+  const inputClass = (field) =>
+    `w-full p-4 bg-slate-50 border rounded-xl outline-none transition-all duration-200 ${
+      focused === field ? 'border-blue-600 ring-4 ring-blue-50 bg-white' : 'border-slate-200 hover:border-slate-300'
+    }`;
 
   return (
     <div className="min-h-screen flex font-sans">
@@ -49,12 +66,18 @@ const Login = () => {
         </div>
       </div>
 
-      {/* Right: Login Form */}
+      {/* Right: Login / Register Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-8">
         <div className="w-full max-w-md">
           <div className="mb-10">
-            <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h2>
-            <p className="text-slate-500">Please enter your credentials to access the workspace.</p>
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">
+              {isRegister ? 'Create Account' : 'Welcome back'}
+            </h2>
+            <p className="text-slate-500">
+              {isRegister
+                ? 'Create a new account to get started with Lumiio.'
+                : 'Please enter your credentials to access the workspace.'}
+            </p>
           </div>
 
           {error && (
@@ -63,28 +86,41 @@ const Login = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="group">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {isRegister && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Display Name</label>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="e.g. Dr. Park"
+                  className={inputClass('name')}
+                  onFocus={() => setFocused('name')}
+                  onBlur={() => setFocused(null)}
+                />
+              </div>
+            )}
+
+            <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">User ID</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className={`w-full p-4 bg-slate-50 border rounded-xl outline-none transition-all duration-200 
-                  ${focused === 'id' ? 'border-blue-600 ring-4 ring-blue-50 bg-white' : 'border-slate-200 hover:border-slate-300'}`}
+                className={inputClass('id')}
                 onFocus={() => setFocused('id')}
                 onBlur={() => setFocused(null)}
               />
             </div>
             
-            <div className="group">
+            <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`w-full p-4 bg-slate-50 border rounded-xl outline-none transition-all duration-200 
-                  ${focused === 'pw' ? 'border-blue-600 ring-4 ring-blue-50 bg-white' : 'border-slate-200 hover:border-slate-300'}`}
+                className={inputClass('pw')}
                 onFocus={() => setFocused('pw')}
                 onBlur={() => setFocused(null)}
               />
@@ -95,12 +131,26 @@ const Login = () => {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold p-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 group"
             >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /></>}
+              {loading ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : isRegister ? (
+                <><UserPlus size={18} /> Create Account</>
+              ) : (
+                <>Sign In <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
+              )}
             </button>
           </form>
           
-          <p className="mt-8 text-center text-sm text-slate-400">
-            Forgot your password? <a href="#" className="text-blue-600 font-medium hover:underline">Contact Support</a>
+          <p className="mt-6 text-center text-sm text-slate-500">
+            {isRegister ? (
+              <>Already have an account?{' '}
+                <button onClick={toggleMode} className="text-blue-600 font-medium hover:underline">Sign In</button>
+              </>
+            ) : (
+              <>Don't have an account?{' '}
+                <button onClick={toggleMode} className="text-blue-600 font-medium hover:underline">Create Account</button>
+              </>
+            )}
           </p>
         </div>
       </div>

@@ -23,7 +23,7 @@ async function request(path, options = {}) {
 
   const res = await fetch(url, { ...options, headers });
 
-  if (res.status === 401 && !path.includes('/auth/login')) {
+  if (res.status === 401 && !path.includes('/auth/login') && !path.includes('/auth/register')) {
     setToken(null);
     window.location.href = '/login';
     throw new Error('Unauthorized');
@@ -41,12 +41,38 @@ async function request(path, options = {}) {
   return res;
 }
 
+async function downloadBlob(path, filename) {
+  const url = `${API_BASE}${path}`;
+  const token = getToken();
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Download failed');
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────
 export const authApi = {
   login: async (username, password) => {
     const data = await request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+    });
+    setToken(data.token);
+    return data;
+  },
+
+  register: async (username, password, displayName) => {
+    const data = await request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, displayName }),
     });
     setToken(data.token);
     return data;
@@ -91,10 +117,11 @@ export const examsApi = {
       body: JSON.stringify({ flag }),
     }),
 
-  exportCsv: (examId) => {
-    const url = `${API_BASE}/exams/${examId}/report/csv`;
-    window.open(url, '_blank');
-  },
+  downloadCsv: (examId) =>
+    downloadBlob(`/exams/${examId}/report/csv`, `${examId}.csv`),
+
+  downloadPdf: (examId, sections = 'cbcSummary,classification,comments') =>
+    downloadBlob(`/exams/${examId}/report/pdf?sections=${sections}`, `${examId}.pdf`),
 };
 
 // ─── Cells ───────────────────────────────────────────────────────────
