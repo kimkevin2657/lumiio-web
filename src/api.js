@@ -1,14 +1,30 @@
 const API_BASE = process.env.REACT_APP_API_URL || '/api';
 
+function getToken() {
+  return localStorage.getItem('lumiio_token') || '';
+}
+
+function setToken(token) {
+  if (token) {
+    localStorage.setItem('lumiio_token', token);
+  } else {
+    localStorage.removeItem('lumiio_token');
+  }
+}
+
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  });
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
 
-  if (res.status === 401 && !path.includes('/auth/')) {
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401 && !path.includes('/auth/login')) {
+    setToken(null);
     window.location.href = '/login';
     throw new Error('Unauthorized');
   }
@@ -27,15 +43,25 @@ async function request(path, options = {}) {
 
 // ─── Auth ────────────────────────────────────────────────────────────
 export const authApi = {
-  login: (username, password) =>
-    request('/auth/login', {
+  login: async (username, password) => {
+    const data = await request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
-    }),
+    });
+    setToken(data.token);
+    return data;
+  },
 
-  logout: () => request('/auth/logout', { method: 'POST' }),
+  logout: async () => {
+    try {
+      await request('/auth/logout', { method: 'POST' });
+    } catch { }
+    setToken(null);
+  },
 
   me: () => request('/auth/me'),
+
+  isLoggedIn: () => !!getToken(),
 };
 
 // ─── Exams ───────────────────────────────────────────────────────────

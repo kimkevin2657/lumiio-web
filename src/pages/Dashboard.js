@@ -264,6 +264,10 @@ const Dashboard = () => {
 
   // ── Initial data load ──────────────────────────
   useEffect(() => {
+    if (!authApi.isLoggedIn()) {
+      navigate('/login');
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -274,12 +278,13 @@ const Dashboard = () => {
           notificationsApi.list(),
         ]);
         if (cancelled) return;
-        setCurrentUser(user.user);
-        setExamList(exams);
-        setDevices(devs);
-        setNotifications(notifs);
-        if (exams.length > 0) {
-          setSelectedExam(exams[0].id);
+        setCurrentUser(user?.user || null);
+        setExamList(Array.isArray(exams) ? exams : []);
+        setDevices(Array.isArray(devs) ? devs : []);
+        setNotifications(Array.isArray(notifs) ? notifs : []);
+        const examArr = Array.isArray(exams) ? exams : [];
+        if (examArr.length > 0) {
+          setSelectedExam(examArr[0].id);
         }
       } catch {
         navigate('/login');
