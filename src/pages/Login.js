@@ -1,14 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Microscope, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Microscope, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { authApi } from '../api';
 
 const Login = () => {
   const navigate = useNavigate();
   const [focused, setFocused] = useState(null);
+  const [username, setUsername] = useState('doctor123');
+  const [password, setPassword] = useState('password');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate('/dashboard');
+    setError('');
+    setLoading(true);
+    try {
+      await authApi.login(username, password);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -43,12 +57,19 @@ const Login = () => {
             <p className="text-slate-500">Please enter your credentials to access the workspace.</p>
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="group">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">User ID</label>
-              <input 
-                type="text" 
-                defaultValue="doctor123"
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className={`w-full p-4 bg-slate-50 border rounded-xl outline-none transition-all duration-200 
                   ${focused === 'id' ? 'border-blue-600 ring-4 ring-blue-50 bg-white' : 'border-slate-200 hover:border-slate-300'}`}
                 onFocus={() => setFocused('id')}
@@ -58,9 +79,10 @@ const Login = () => {
             
             <div className="group">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Password</label>
-              <input 
-                type="password" 
-                defaultValue="password"
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className={`w-full p-4 bg-slate-50 border rounded-xl outline-none transition-all duration-200 
                   ${focused === 'pw' ? 'border-blue-600 ring-4 ring-blue-50 bg-white' : 'border-slate-200 hover:border-slate-300'}`}
                 onFocus={() => setFocused('pw')}
@@ -68,11 +90,12 @@ const Login = () => {
               />
             </div>
 
-            <button 
-              type="submit" 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold p-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 group"
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold p-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 group"
             >
-              Sign In <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /></>}
             </button>
           </form>
           

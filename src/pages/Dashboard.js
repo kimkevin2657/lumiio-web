@@ -3,9 +3,11 @@ import {
   FileText, User, Bell, ChevronDown, ChevronUp, Search,
   ChevronsUpDown, Pencil, Check, X, Monitor, FileBarChart,
   Settings, HelpCircle, LogOut, UserCircle, Wifi, WifiOff,
-  RefreshCw, Download, CheckCircle2, Clock, AlertTriangle, Info
+  RefreshCw, Download, CheckCircle2, Clock, AlertTriangle, Info,
+  Loader2, Plus
 } from 'lucide-react';
-import { EXAM_LIST, EXAMS_DATABASE, NOTIFICATIONS, DEVICES } from '../data';
+import { useNavigate } from 'react-router-dom';
+import { examsApi, devicesApi, notificationsApi, authApi } from '../api';
 import { CBCTab, CellTab, ViewerTab } from '../components/TabContent';
 
 // ─── Dropdown wrapper (closes on outside click) ─────────────────────────
@@ -21,7 +23,7 @@ const useClickOutside = (ref, handler) => {
 };
 
 // ─── Notification Panel ─────────────────────────────────────────────────
-const NotificationPanel = ({ notifications, open, onClose }) => {
+const NotificationPanel = ({ notifications, open, onClose, onMarkAllRead, onMarkRead }) => {
   const ref = useRef(null);
   useClickOutside(ref, onClose);
   if (!open) return null;
@@ -37,11 +39,15 @@ const NotificationPanel = ({ notifications, open, onClose }) => {
     <div ref={ref} className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
       <div className="p-4 border-b border-slate-100 flex justify-between items-center">
         <h3 className="font-bold text-slate-800 text-sm">알림</h3>
-        <span className="text-[10px] text-blue-600 font-medium cursor-pointer hover:underline">모두 읽음 처리</span>
+        <span onClick={onMarkAllRead} className="text-[10px] text-blue-600 font-medium cursor-pointer hover:underline">모두 읽음 처리</span>
       </div>
       <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
         {notifications.map((n) => (
-          <div key={n.id} className={`px-4 py-3 flex gap-3 hover:bg-slate-50 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/40' : ''}`}>
+          <div
+            key={n.id}
+            onClick={() => !n.read && onMarkRead(n.id)}
+            className={`px-4 py-3 flex gap-3 hover:bg-slate-50 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/40' : ''}`}
+          >
             <div className="mt-0.5 flex-shrink-0">{iconMap[n.type] || iconMap.info}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -53,16 +59,16 @@ const NotificationPanel = ({ notifications, open, onClose }) => {
             </div>
           </div>
         ))}
-      </div>
-      <div className="p-3 border-t border-slate-100 text-center">
-        <button className="text-xs text-blue-600 font-medium hover:underline">모든 알림 보기</button>
+        {notifications.length === 0 && (
+          <div className="p-6 text-center text-xs text-slate-400">알림이 없습니다</div>
+        )}
       </div>
     </div>
   );
 };
 
 // ─── Profile Dropdown ───────────────────────────────────────────────────
-const ProfileDropdown = ({ open, onClose }) => {
+const ProfileDropdown = ({ open, onClose, user, onLogout }) => {
   const ref = useRef(null);
   useClickOutside(ref, onClose);
   if (!open) return null;
@@ -70,13 +76,13 @@ const ProfileDropdown = ({ open, onClose }) => {
   return (
     <div ref={ref} className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
       <div className="p-4 border-b border-slate-100">
-        <div className="font-bold text-slate-800 text-sm">Dr. Kim</div>
-        <div className="text-xs text-slate-400">Pathologist · Lumiio</div>
+        <div className="font-bold text-slate-800 text-sm">{user?.displayName || 'User'}</div>
+        <div className="text-xs text-slate-400">{user?.role || 'Staff'} · Lumiio</div>
       </div>
       <div className="py-1">
         {[
-          { icon: <UserCircle size={15} />, label: '프로필 정보', action: null },
-          { icon: <Settings size={15} />, label: '계정 설정', action: null },
+          { icon: <UserCircle size={15} />, label: '프로필 정보' },
+          { icon: <Settings size={15} />, label: '계정 설정' },
         ].map((item, i) => (
           <button key={i} className="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
             {item.icon} {item.label}
@@ -84,7 +90,7 @@ const ProfileDropdown = ({ open, onClose }) => {
         ))}
       </div>
       <div className="border-t border-slate-100 py-1">
-        <button className="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-red-500 hover:bg-red-50 transition-colors">
+        <button onClick={onLogout} className="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-red-500 hover:bg-red-50 transition-colors">
           <LogOut size={15} /> 로그아웃
         </button>
       </div>
@@ -92,7 +98,7 @@ const ProfileDropdown = ({ open, onClose }) => {
   );
 };
 
-// ─── Top-bar Menu Dropdown (Devices / Report / Settings / Help) ─────────
+// ─── Top-bar Menu Dropdown ──────────────────────────────────────────────
 const MenuDropdown = ({ open, onClose, children }) => {
   const ref = useRef(null);
   useClickOutside(ref, onClose);
@@ -105,40 +111,83 @@ const MenuDropdown = ({ open, onClose, children }) => {
 };
 
 // ─── Devices Panel Content ──────────────────────────────────────────────
-const DevicesPanel = () => (
-  <div className="p-4 space-y-4 max-h-[420px] overflow-y-auto">
-    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">장비 상태</h4>
-    {DEVICES.map((dev) => (
-      <div key={dev.id} className="border border-slate-100 rounded-lg p-3 space-y-2 hover:border-slate-300 transition-colors">
-        <div className="flex justify-between items-center">
-          <span className="font-semibold text-sm text-slate-800">{dev.name}</span>
-          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            dev.connection === 'Online' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-          }`}>
-            {dev.connection === 'Online' ? <Wifi size={10} /> : <WifiOff size={10} />}
-            {dev.connection}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <div className="text-slate-400">모델</div><div className="text-slate-700">{dev.model}</div>
-          <div className="text-slate-400">시리얼</div><div className="text-slate-700">{dev.serial}</div>
-        </div>
-        <div className="border-t border-slate-50 pt-2 mt-2">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            <div className="text-slate-400">마지막 동기화</div><div className="text-slate-700">{dev.lastSync}</div>
-            <div className="text-slate-400">스케줄</div><div className="text-slate-700">{dev.syncSchedule}</div>
+const DevicesPanel = ({ devices, onSync, onCreate }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', model: '', serial: '', syncSchedule: 'Manual' });
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleCreate = async () => {
+    if (!form.name || !form.model || !form.serial) return;
+    setSubmitting(true);
+    try {
+      await onCreate(form);
+      setForm({ name: '', model: '', serial: '', syncSchedule: 'Manual' });
+      setShowForm(false);
+    } catch { }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="p-4 space-y-4 max-h-[420px] overflow-y-auto">
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">장비 상태</h4>
+      {devices.map((dev) => (
+        <div key={dev.id} className="border border-slate-100 rounded-lg p-3 space-y-2 hover:border-slate-300 transition-colors">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold text-sm text-slate-800">{dev.name}</span>
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              dev.connection === 'Online' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+            }`}>
+              {dev.connection === 'Online' ? <Wifi size={10} /> : <WifiOff size={10} />}
+              {dev.connection}
+            </span>
           </div>
-          <button className="mt-2 w-full py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors flex items-center justify-center gap-1">
-            <RefreshCw size={12} /> 지금 동기화
-          </button>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <div className="text-slate-400">모델</div><div className="text-slate-700">{dev.model}</div>
+            <div className="text-slate-400">시리얼</div><div className="text-slate-700">{dev.serial}</div>
+          </div>
+          <div className="border-t border-slate-50 pt-2 mt-2">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <div className="text-slate-400">마지막 동기화</div><div className="text-slate-700">{dev.lastSync || '—'}</div>
+              <div className="text-slate-400">스케줄</div><div className="text-slate-700">{dev.syncSchedule}</div>
+            </div>
+            <button
+              onClick={() => onSync(dev.id)}
+              className="mt-2 w-full py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
+            >
+              <RefreshCw size={12} /> 지금 동기화
+            </button>
+          </div>
         </div>
-      </div>
-    ))}
-    <button className="w-full py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors">
-      + 새 장비 페어링
-    </button>
-  </div>
-);
+      ))}
+
+      {showForm ? (
+        <div className="border border-blue-200 rounded-lg p-3 space-y-2 bg-blue-50/30">
+          <input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+            placeholder="장비명" className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 outline-none" />
+          <input value={form.model} onChange={(e) => setForm(f => ({ ...f, model: e.target.value }))}
+            placeholder="모델" className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 outline-none" />
+          <input value={form.serial} onChange={(e) => setForm(f => ({ ...f, serial: e.target.value }))}
+            placeholder="시리얼 번호" className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 outline-none" />
+          <div className="flex gap-2">
+            <button onClick={handleCreate} disabled={submitting}
+              className="flex-1 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors">
+              {submitting ? '등록 중...' : '등록'}
+            </button>
+            <button onClick={() => setShowForm(false)}
+              className="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded hover:bg-slate-50 transition-colors">
+              취소
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setShowForm(true)}
+          className="w-full py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center gap-1">
+          <Plus size={12} /> 새 장비 페어링
+        </button>
+      )}
+    </div>
+  );
+};
 
 // ─── Report Panel Content ───────────────────────────────────────────────
 const ReportPanel = ({ selectedExamId }) => {
@@ -167,7 +216,10 @@ const ReportPanel = ({ selectedExamId }) => {
       </div>
       <div className="border-t border-slate-100 pt-4">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">CBC Table (CSV)</h4>
-        <button className="w-full py-2 border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5">
+        <button
+          onClick={() => examsApi.exportCsv(selectedExamId)}
+          className="w-full py-2 border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5"
+        >
           <Download size={13} /> .csv 다운로드
         </button>
       </div>
@@ -179,8 +231,18 @@ const ReportPanel = ({ selectedExamId }) => {
 // Dashboard
 // ═══════════════════════════════════════════════════════════════════════
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('cbc');
-  const [selectedExam, setSelectedExam] = useState(EXAM_LIST[0].id);
+
+  // Data from API
+  const [examList, setExamList] = useState([]);
+  const [examRecord, setExamRecord] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [selectedExam, setSelectedExam] = useState(null);
 
   // Exam search
   const [examSearch, setExamSearch] = useState('');
@@ -188,33 +250,111 @@ const Dashboard = () => {
   // Sort
   const [sortConfig, setSortConfig] = useState({ column: 'id', direction: 'asc' });
 
-  // Note editing — per exam
-  const [noteOverrides, setNoteOverrides] = useState({});
+  // Note editing
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [draftNote, setDraftNote] = useState('');
 
   // Top-bar dropdown states
-  const [openMenu, setOpenMenu] = useState(null); // 'notifications' | 'profile' | 'devices' | 'report' | 'settings' | 'help' | null
+  const [openMenu, setOpenMenu] = useState(null);
 
   const toggleMenu = useCallback((menu) => {
     setOpenMenu((prev) => (prev === menu ? null : menu));
   }, []);
   const closeMenu = useCallback(() => setOpenMenu(null), []);
 
+  // ── Initial data load ──────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [user, exams, devs, notifs] = await Promise.all([
+          authApi.me(),
+          examsApi.list(),
+          devicesApi.list(),
+          notificationsApi.list(),
+        ]);
+        if (cancelled) return;
+        setCurrentUser(user.user);
+        setExamList(exams);
+        setDevices(devs);
+        setNotifications(notifs);
+        if (exams.length > 0) {
+          setSelectedExam(exams[0].id);
+        }
+      } catch {
+        navigate('/login');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [navigate]);
+
+  // ── Load exam record when selection changes ────
+  useEffect(() => {
+    if (!selectedExam) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const record = await examsApi.get(selectedExam);
+        if (!cancelled) setExamRecord(record);
+      } catch { }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedExam]);
+
   // ── Derived data ─────────────────────────────
-  const examRecord = EXAMS_DATABASE[selectedExam];
   const patientInfo = examRecord?.patient || { id: '', name: '—', gender: '', age: 0, note: '' };
   const cbcData = examRecord?.cbcData || [];
   const cellData = examRecord?.cellData || null;
 
-  const currentNote = noteOverrides[selectedExam] !== undefined ? noteOverrides[selectedExam] : patientInfo.note;
+  const currentNote = patientInfo.note || '';
 
   const handleNoteEdit = () => { setDraftNote(currentNote); setIsEditingNote(true); };
-  const handleNoteSave = () => { setNoteOverrides(p => ({ ...p, [selectedExam]: draftNote })); setIsEditingNote(false); };
+  const handleNoteSave = async () => {
+    try {
+      await examsApi.updateNote(selectedExam, draftNote);
+      setExamRecord(prev => prev ? { ...prev, patient: { ...prev.patient, note: draftNote } } : prev);
+    } catch { }
+    setIsEditingNote(false);
+  };
   const handleNoteCancel = () => { setIsEditingNote(false); };
 
-  // Reset editing when exam changes
   useEffect(() => { setIsEditingNote(false); }, [selectedExam]);
+
+  // ── Notification handlers ──────────────────────
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationsApi.markAllRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch { }
+  };
+
+  const handleMarkRead = async (id) => {
+    try {
+      await notificationsApi.markRead(id);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    } catch { }
+  };
+
+  // ── Device handlers ────────────────────────────
+  const handleDeviceSync = async (deviceId) => {
+    try {
+      const updated = await devicesApi.sync(deviceId);
+      setDevices(prev => prev.map(d => d.id === deviceId ? updated : d));
+    } catch { }
+  };
+
+  const handleDeviceCreate = async (form) => {
+    const created = await devicesApi.create(form);
+    setDevices(prev => [...prev, created]);
+  };
+
+  // ── Logout ─────────────────────────────────────
+  const handleLogout = async () => {
+    try { await authApi.logout(); } catch { }
+    navigate('/login');
+  };
 
   // ── Sorting ──────────────────────────────────
   const handleSort = (column) => {
@@ -227,7 +367,7 @@ const Dashboard = () => {
 
   const sortedExams = useMemo(() => {
     const q = examSearch.toLowerCase();
-    const filtered = EXAM_LIST.filter(
+    const filtered = examList.filter(
       (exam) =>
         exam.id.toLowerCase().includes(q) ||
         (exam.patientName && exam.patientName.toLowerCase().includes(q)) ||
@@ -246,7 +386,7 @@ const Dashboard = () => {
       return 0;
     });
     return sorted;
-  }, [sortConfig, examSearch]);
+  }, [sortConfig, examSearch, examList]);
 
   const SortIcon = ({ column }) => {
     const isActive = sortConfig.column === column;
@@ -256,7 +396,46 @@ const Dashboard = () => {
       : <ChevronDown size={12} className="text-blue-600 ml-1 inline-block" />;
   };
 
-  const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // ── Cell reclassify/comment callbacks for CellTab ──
+  const handleCellReclassify = async (cellId, newType) => {
+    const updated = await import('../api').then(m => m.cellsApi.reclassify(selectedExam, cellId, newType));
+    setExamRecord(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        cellData: {
+          ...prev.cellData,
+          wbc: prev.cellData.wbc.map(c => c.id === cellId ? updated : c),
+        },
+      };
+    });
+    return updated;
+  };
+
+  const handleCellComment = async (cellId, comment) => {
+    const updated = await import('../api').then(m => m.cellsApi.updateComment(selectedExam, cellId, comment));
+    setExamRecord(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        cellData: {
+          ...prev.cellData,
+          wbc: prev.cellData.wbc.map(c => c.id === cellId ? updated : c),
+        },
+      };
+    });
+    return updated;
+  };
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 size={32} className="animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   // ── Render ───────────────────────────────────
   return (
@@ -286,7 +465,7 @@ const Dashboard = () => {
                 <Monitor size={14} /> Devices
               </button>
               <MenuDropdown open={openMenu === 'devices'} onClose={closeMenu}>
-                <DevicesPanel />
+                <DevicesPanel devices={devices} onSync={handleDeviceSync} onCreate={handleDeviceCreate} />
               </MenuDropdown>
             </div>
 
@@ -303,7 +482,7 @@ const Dashboard = () => {
               </MenuDropdown>
             </div>
 
-            {/* Settings (planning) */}
+            {/* Settings */}
             <div className="relative">
               <button
                 onClick={() => toggleMenu('settings')}
@@ -319,7 +498,7 @@ const Dashboard = () => {
               </MenuDropdown>
             </div>
 
-            {/* Help (planning) */}
+            {/* Help */}
             <div className="relative">
               <button
                 onClick={() => toggleMenu('help')}
@@ -355,9 +534,11 @@ const Dashboard = () => {
               )}
             </button>
             <NotificationPanel
-              notifications={NOTIFICATIONS}
+              notifications={notifications}
               open={openMenu === 'notifications'}
               onClose={closeMenu}
+              onMarkAllRead={handleMarkAllRead}
+              onMarkRead={handleMarkRead}
             />
           </div>
 
@@ -369,14 +550,16 @@ const Dashboard = () => {
               onClick={() => toggleMenu('profile')}
               className="flex items-center gap-3 hover:bg-slate-50 p-1 pr-3 rounded-full transition-colors"
             >
-              <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-xs font-bold">DR</div>
+              <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                {(currentUser?.displayName || 'U').substring(0, 2).toUpperCase()}
+              </div>
               <div className="text-xs text-left">
-                <div className="font-bold text-slate-700">Dr. Kim</div>
-                <div className="text-slate-400">Pathologist</div>
+                <div className="font-bold text-slate-700">{currentUser?.displayName || 'User'}</div>
+                <div className="text-slate-400">{currentUser?.role || 'Staff'}</div>
               </div>
               <ChevronDown size={14} className="text-slate-400" />
             </button>
-            <ProfileDropdown open={openMenu === 'profile'} onClose={closeMenu} />
+            <ProfileDropdown open={openMenu === 'profile'} onClose={closeMenu} user={currentUser} onLogout={handleLogout} />
           </div>
         </div>
       </header>
@@ -394,7 +577,7 @@ const Dashboard = () => {
                 <FileText size={18} className="text-blue-600" />
                 <h3 className="font-bold text-slate-800">Exam List</h3>
               </div>
-              <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{EXAM_LIST.length}</span>
+              <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{examList.length}</span>
             </div>
 
             {/* Search */}
@@ -549,11 +732,18 @@ const Dashboard = () => {
             })}
           </div>
 
-          {/* Viewport — pass data props */}
+          {/* Viewport */}
           <div className="flex-1 overflow-hidden relative bg-slate-50/50">
             <div className="absolute inset-0 p-6 overflow-auto">
               {activeTab === 'cbc' && <CBCTab cbcData={cbcData} />}
-              {activeTab === 'cell' && <CellTab examId={selectedExam} cellData={cellData} />}
+              {activeTab === 'cell' && (
+                <CellTab
+                  examId={selectedExam}
+                  cellData={cellData}
+                  onReclassify={handleCellReclassify}
+                  onCommentSave={handleCellComment}
+                />
+              )}
               {activeTab === 'viewer' && <ViewerTab />}
             </div>
           </div>

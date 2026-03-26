@@ -14,7 +14,7 @@ const Card = ({ children, className = '' }) => (
 );
 
 // ═══════════════════════════════════════════════════════════════════════
-// 1. CBC Tab — now receives cbcData prop, grouped by section
+// 1. CBC Tab
 // ═══════════════════════════════════════════════════════════════════════
 export const CBCTab = ({ cbcData = [] }) => {
   const rbcData = Array.from({ length: 120 }, (_, i) => {
@@ -28,7 +28,6 @@ export const CBCTab = ({ cbcData = [] }) => {
     return { name: x, value };
   });
 
-  // Group by section
   const sections = useMemo(() => {
     const map = new Map();
     cbcData.forEach((row) => {
@@ -149,10 +148,9 @@ export const CBCTab = ({ cbcData = [] }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// 2. Cell Classification Tab — enhanced with comments, AI info, overlay
+// 2. Cell Classification Tab — with API-backed reclassify + comments
 // ═══════════════════════════════════════════════════════════════════════
-export const CellTab = ({ examId, cellData }) => {
-  // Initialise cell state from props (re-init when exam changes)
+export const CellTab = ({ examId, cellData, onReclassify, onCommentSave }) => {
   const [cells, setCells] = useState([]);
   useEffect(() => {
     if (cellData?.wbc) {
@@ -173,7 +171,6 @@ export const CellTab = ({ examId, cellData }) => {
   const [selectedCellId, setSelectedCellId] = useState(null);
   const [pendingType, setPendingType] = useState(null);
 
-  // Comment editing
   const [commentDraft, setCommentDraft] = useState('');
   const [isCommentOpen, setIsCommentOpen] = useState(false);
 
@@ -200,32 +197,40 @@ export const CellTab = ({ examId, cellData }) => {
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (pendingType && selectedCellId) {
-      setCells((prev) =>
-        prev.map((c) =>
-          c.id === selectedCellId ? { ...c, type: pendingType, reclassified: true } : c
-        )
-      );
+      try {
+        if (onReclassify) {
+          await onReclassify(selectedCellId, pendingType);
+        }
+        setCells((prev) =>
+          prev.map((c) =>
+            c.id === selectedCellId ? { ...c, type: pendingType, reclassified: true } : c
+          )
+        );
+      } catch { }
       setPendingType(null);
     }
   };
 
-  const handleCommentSave = () => {
+  const handleCommentSaveLocal = async () => {
     if (selectedCellId) {
-      setCells(prev => prev.map(c => c.id === selectedCellId ? { ...c, comment: commentDraft } : c));
+      try {
+        if (onCommentSave) {
+          await onCommentSave(selectedCellId, commentDraft);
+        }
+        setCells(prev => prev.map(c => c.id === selectedCellId ? { ...c, comment: commentDraft } : c));
+      } catch { }
       setIsCommentOpen(false);
     }
   };
 
-  // Mark as abnormal
   const handleMarkAbnormal = () => {
     if (selectedCellId) {
       setPendingType('Uncertain');
     }
   };
 
-  // Blood cell visual
   const BloodCell = ({ cell, isSelected, onClick }) => {
     const isUncertain = cell.type === 'Uncertain';
     const wasReclassified = cell.reclassified;
@@ -242,7 +247,6 @@ export const CellTab = ({ examId, cellData }) => {
         <div className={`absolute inset-0 ${color}`} />
         <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] ${core} rounded-full blur-[2px] shadow-lg`} />
         <div className="absolute top-2 right-2 w-1/3 h-1/3 bg-white/30 rounded-full blur-md" />
-        {/* Indicators */}
         {wasReclassified && (
           <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 bg-orange-500 rounded-full border border-white flex items-center justify-center z-10">
             <Tag size={7} className="text-white" />
@@ -271,7 +275,6 @@ export const CellTab = ({ examId, cellData }) => {
     <div className="flex flex-col h-full gap-6 fade-in">
       {/* Summary cards */}
       <div className="flex gap-4">
-        {/* WBC Count */}
         <Card className="flex-1 p-5 flex flex-col justify-between">
           <div className="text-xs text-slate-500 font-bold uppercase mb-3">WBC Count</div>
           <div className="flex items-start gap-5">
@@ -291,7 +294,6 @@ export const CellTab = ({ examId, cellData }) => {
           </div>
         </Card>
 
-        {/* RBC Count */}
         <Card className="flex-1 p-5 flex flex-col justify-between">
           <div className="text-xs text-slate-500 font-bold uppercase mb-3">RBC Count</div>
           <div className="flex items-start gap-5">
@@ -309,7 +311,6 @@ export const CellTab = ({ examId, cellData }) => {
           </div>
         </Card>
 
-        {/* PLT Count */}
         <Card className="flex-1 p-5 flex flex-col justify-between">
           <div className="text-xs text-slate-500 font-bold uppercase mb-3">PLT Count</div>
           <div className="flex items-start gap-5">
@@ -330,7 +331,6 @@ export const CellTab = ({ examId, cellData }) => {
 
       {/* Grid: Cell gallery + Inspector */}
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
-        {/* Cell Gallery */}
         <Card className="col-span-8 p-6 overflow-y-auto scrollbar-hide">
           {categories.map((type) => {
             const typeCells = cells.filter((c) => c.type === type);
@@ -368,14 +368,13 @@ export const CellTab = ({ examId, cellData }) => {
           })}
         </Card>
 
-        {/* ─── Cell Inspector (Enhanced) ─── */}
+        {/* ─── Cell Inspector ─── */}
         <div className="col-span-4 flex flex-col gap-4 overflow-y-auto">
           <Card className="p-6 flex flex-col items-center flex-1 sticky top-0">
             <h4 className="text-sm font-bold text-slate-700 w-full mb-4 flex items-center gap-2">
               <ZoomIn size={16} /> Cell Inspector
             </h4>
 
-            {/* Zoomed cell view with overlay icons */}
             <div className="w-52 h-52 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center mb-4 relative group">
               <div className={`w-36 h-36 rounded-full relative blur-[1px] transition-all duration-300 ${
                 selectedCellData?.type === 'Uncertain' ? 'bg-amber-200/50' : 'bg-purple-200/50'
@@ -387,13 +386,11 @@ export const CellTab = ({ examId, cellData }) => {
                   selectedCellData?.type === 'Uncertain' ? 'bg-amber-700' : 'bg-purple-700'
                 }`} />
               </div>
-              {/* Crosshair */}
               <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
                 <div className="w-full h-[1px] bg-slate-900" />
                 <div className="h-full w-[1px] bg-slate-900 absolute" />
               </div>
 
-              {/* ── Overlay tool buttons (visible on hover) ── */}
               <div className="absolute top-2 right-2 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                 <button
                   onClick={handleMarkAbnormal}
@@ -417,7 +414,6 @@ export const CellTab = ({ examId, cellData }) => {
                 </button>
               </div>
 
-              {/* Reclassified badge overlay */}
               {selectedCellData?.reclassified && (
                 <div className="absolute bottom-2 left-2 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded z-10 flex items-center gap-0.5">
                   <Tag size={8} /> 재분류됨
@@ -425,15 +421,12 @@ export const CellTab = ({ examId, cellData }) => {
               )}
             </div>
 
-            {/* Info rows */}
             <div className="w-full space-y-3">
-              {/* AI Prediction */}
               <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <span className="text-slate-500 flex items-center gap-1.5"><Eye size={13} /> AI 예측</span>
                 <span className="font-bold text-slate-700">{selectedCellData?.aiPrediction || '—'}</span>
               </div>
 
-              {/* Selected class */}
               <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <span className="text-slate-500">Selected Class</span>
                 <span className={`font-bold ${displayedType === 'Uncertain' ? 'text-amber-600' : 'text-blue-700'}`}>
@@ -442,7 +435,6 @@ export const CellTab = ({ examId, cellData }) => {
                 </span>
               </div>
 
-              {/* AI Confidence */}
               <div className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <span className="text-slate-500">AI Confidence</span>
                 <span className={`font-bold ${
@@ -454,7 +446,6 @@ export const CellTab = ({ examId, cellData }) => {
                 </span>
               </div>
 
-              {/* Re-classify buttons */}
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Re-classify</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -519,7 +510,7 @@ export const CellTab = ({ examId, cellData }) => {
                     />
                     <div className="flex gap-2">
                       <button
-                        onClick={handleCommentSave}
+                        onClick={handleCommentSaveLocal}
                         className="flex-1 py-1.5 bg-blue-600 text-white text-xs rounded-lg font-medium flex items-center justify-center gap-1 hover:bg-blue-700 transition-colors"
                       >
                         <Send size={11} /> 저장
@@ -549,7 +540,7 @@ export const CellTab = ({ examId, cellData }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// 3. Viewer Tab — unchanged except minor cleanups
+// 3. Viewer Tab — unchanged
 // ═══════════════════════════════════════════════════════════════════════
 
 const generateSlideCells = (slideIndex, virtualW, virtualH) => {
